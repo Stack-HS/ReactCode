@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import axios from 'axios';
 
 export default function GradePortal() {
@@ -7,8 +7,120 @@ export default function GradePortal() {
   const [selection, setSelection] = useState('info');
   const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(false);
+  
+  // New state variables for ECFinder
+  const [ecQuery, setEcQuery] = useState('');
+  const [ecResults, setEcResults] = useState([]);
+  const [ecCurrentIndex, setEcCurrentIndex] = useState(0);
+  const [ecLoading, setEcLoading] = useState(false);
+  const [ecError, setEcError] = useState('');
+  const [ecPage, setEcPage] = useState(1);
+  const [ecTotalPages, setEcTotalPages] = useState(1);
+  const [ecTotalResults, setEcTotalResults] = useState(0);
+  const [debugMessage, setDebugMessage] = useState(''); // Add debug message state
+  const scrollContainerRef = useRef(null);
 
   const baseUrl = 'https://friscoisdhacapi.vercel.app/api';
+  const ecApiToken = "z5Vdkas3kjaf4fk93jf84230fjgh8329cjaaabcddde3fafa0";
+  const ecBaseUrl = "https://corsproxy.io/?https://api.capplica.com/api/search";
+
+  const navItems = [
+    { key: 'info', label: 'Student Info' },
+    { key: 'gpa', label: 'GPA' },
+    { key: 'schedule', label: 'Schedule' },
+    { key: 'transcript', label: 'Transcript' },
+    { key: 'currentclasses', label: 'Current Classes' },
+    { key: 'pastclasses', label: 'Past Classes' },
+    { key: 'ecfinder', label: 'Extracurricular Finder' }
+  ];
+
+  // Function to fetch EC results
+  const fetchEcResults = async (page = 1) => {
+    if (!ecQuery.trim()) {
+      setEcError('Please enter a search query');
+      return;
+    }
+    
+    try {
+      setEcLoading(true);
+      setEcError('');
+      setEcResults([]);
+      
+      const url = `${ecBaseUrl}?token=${ecApiToken}&query=${encodeURIComponent(ecQuery)}&page=${page}`;
+      const response = await axios.get(url);
+      
+      if (response.data) {
+        const results = response.data.results || [];
+        setEcResults(results);
+        setEcCurrentIndex(0);
+        setEcPage(page);
+        setEcTotalPages(response.data.total_pages || 1);
+        setEcTotalResults(response.data.total_results || results.length);
+        
+        if (results.length === 0) {
+          setEcError('No results found');
+        }
+      } else {
+        setEcError('Invalid response format from server');
+      }
+    } catch (error) {
+      setEcError('Failed to fetch extracurriculars.');
+    } finally {
+      setEcLoading(false);
+    }
+  };
+
+  // Function to navigate to next EC result
+  const nextEcResult = () => {
+    if (ecCurrentIndex < ecResults.length - 1) {
+      setEcCurrentIndex(ecCurrentIndex + 1);
+    } else if (ecPage < ecTotalPages) {
+      // Move to next page
+      fetchEcResults(ecPage + 1);
+    } else {
+      // Wrap to first result of first page
+      fetchEcResults(1);
+    }
+  };
+
+  // Function to navigate to previous EC result
+  const prevEcResult = () => {
+    if (ecCurrentIndex > 0) {
+      setEcCurrentIndex(ecCurrentIndex - 1);
+    } else if (ecPage > 1) {
+      // Move to previous page
+      fetchEcResults(ecPage - 1);
+    } else {
+      // Wrap to last result of last page
+      fetchEcResults(ecTotalPages);
+    }
+  };
+
+  // Test function
+  const testSearch = () => {
+    setEcQuery('texas');
+    setTimeout(() => {
+      fetchEcResults(1);
+    }, 100);
+  };
+
+  // Handle keyboard navigation
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (selection === 'ecfinder') {
+        if (e.key === 'ArrowRight') {
+          nextEcResult();
+        } else if (e.key === 'ArrowLeft') {
+          prevEcResult();
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [selection, ecCurrentIndex, ecResults.length, nextEcResult, prevEcResult]);
 
   const fetchData = async () => {
     let url = '';
@@ -50,16 +162,151 @@ export default function GradePortal() {
     }
   };
 
-  const navItems = [
-    { key: 'info', label: 'Student Info' },
-    { key: 'gpa', label: 'GPA' },
-    { key: 'schedule', label: 'Schedule' },
-    { key: 'transcript', label: 'Transcript' },
-    { key: 'currentclasses', label: 'Current Classes' },
-    { key: 'pastclasses', label: 'Past Classes' },
-  ];
-
   const renderResult = () => {
+    if (selection === 'ecfinder') {
+      return (
+        <div className="space-y-4">
+          <div className="flex flex-col space-y-4">
+            <div className="flex space-x-2">
+              <input
+                type="text"
+                placeholder="Search for extracurriculars..."
+                value={ecQuery}
+                onChange={(e) => setEcQuery(e.target.value)}
+                className="flex-1 p-2 border rounded"
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    fetchEcResults(1);
+                  }
+                }}
+              />
+              <button
+                onClick={() => fetchEcResults(1)}
+                className="bg-blue-500 text-white py-2 px-4 rounded hover:bg-blue-600"
+                disabled={ecLoading}
+              >
+                {ecLoading ? 'Searching...' : 'Search'}
+              </button>
+              <button
+                onClick={testSearch}
+                className="bg-green-500 text-white py-2 px-4 rounded hover:bg-green-600"
+              >
+                Test Search
+              </button>
+            </div>
+            
+            {ecError && (
+              <div className="text-red-500 p-2 bg-red-50 rounded">
+                {ecError}
+              </div>
+            )}
+            
+            {ecLoading && (
+              <div className="text-gray-600 p-2">
+                Searching for extracurriculars...
+              </div>
+            )}
+            
+            {!ecLoading && ecResults && ecResults.length > 0 && (
+              <div className="relative">
+                <div className="flex justify-between items-center mb-2">
+                  <h2 className="text-xl font-bold">Extracurricular Results</h2>
+                  <div className="text-sm text-gray-500">
+                    Result {ecCurrentIndex + 1} of {ecResults.length} (Page {ecPage} of {ecTotalPages})
+                  </div>
+                </div>
+                
+                <div 
+                  ref={scrollContainerRef}
+                  className="bg-white shadow rounded p-4 overflow-x-auto"
+                  style={{ 
+                    scrollBehavior: 'smooth',
+                    scrollSnapType: 'x mandatory',
+                    WebkitOverflowScrolling: 'touch'
+                  }}
+                >
+                  <div className="min-w-full">
+                    {ecResults[ecCurrentIndex] && (
+                      <>
+                        <div className="mb-4">
+                          <h3 className="text-xl font-bold text-blue-600">{ecResults[ecCurrentIndex].Name}</h3>
+                          <p className="text-gray-600">{ecResults[ecCurrentIndex].Type} • {ecResults[ecCurrentIndex].Subject}</p>
+                        </div>
+                        <div className="grid grid-cols-2 gap-4">
+                          <div>
+                            <p className="font-semibold">Location:</p>
+                            <p>{ecResults[ecCurrentIndex].Location}</p>
+                          </div>
+                          <div>
+                            <p className="font-semibold">Price:</p>
+                            <p>{ecResults[ecCurrentIndex].Price}</p>
+                          </div>
+                          <div>
+                            <p className="font-semibold">Details:</p>
+                            <p>{ecResults[ecCurrentIndex].Details}</p>
+                          </div>
+                          <div>
+                            <p className="font-semibold">State:</p>
+                            <p>{ecResults[ecCurrentIndex].FullState}</p>
+                          </div>
+                        </div>
+                        <div className="mt-4">
+                          <p className="font-semibold">Summary:</p>
+                          <p className="text-gray-700">{ecResults[ecCurrentIndex].Summary}</p>
+                        </div>
+                        <div className="mt-4">
+                          <a 
+                            href={ecResults[ecCurrentIndex].Link}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-blue-500 hover:text-blue-700 underline"
+                          >
+                            Learn More
+                          </a>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                </div>
+                
+                <div className="flex justify-between mt-4">
+                  <button
+                    onClick={prevEcResult}
+                    className={`p-2 rounded-full ${
+                      ecCurrentIndex > 0 || ecPage > 1
+                        ? 'bg-blue-500 text-white hover:bg-blue-600' 
+                        : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                    }`}
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                    </svg>
+                  </button>
+                  
+                  <button
+                    onClick={nextEcResult}
+                    className={`p-2 rounded-full ${
+                      ecCurrentIndex < ecResults.length - 1 || ecPage < ecTotalPages
+                        ? 'bg-blue-500 text-white hover:bg-blue-600' 
+                        : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                    }`}
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                    </svg>
+                  </button>
+                </div>
+                
+                <div className="mt-4 text-sm text-gray-500 text-center">
+                  Use left/right arrow keys to navigate between results
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      );
+    }
+    
     if (!result) return <div className="text-gray-600">No data to display.</div>;
     if (typeof result === 'string') return <div className="text-red-500">{result}</div>;
 
@@ -268,28 +515,30 @@ export default function GradePortal() {
           </div>
           {/* Main Content Area */}
           <div className="w-3/4 p-6">
-            <div className="space-y-4 mb-4">
-              <input
-                type="text"
-                placeholder="Username"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                className="w-full p-2 border rounded"
-              />
-              <input
-                type="password"
-                placeholder="Password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="w-full p-2 border rounded"
-              />
-              <button
-                onClick={fetchData}
-                className="w-full bg-blue-500 text-white py-2 rounded"
-              >
-                {loading ? 'Loading...' : 'Get Info'}
-              </button>
-            </div>
+            {selection !== 'ecfinder' && (
+              <div className="space-y-4 mb-4">
+                <input
+                  type="text"
+                  placeholder="Username"
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
+                  className="w-full p-2 border rounded"
+                />
+                <input
+                  type="password"
+                  placeholder="Password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="w-full p-2 border rounded"
+                />
+                <button
+                  onClick={fetchData}
+                  className="w-full bg-blue-500 text-white py-2 rounded"
+                >
+                  {loading ? 'Loading...' : 'Get Info'}
+                </button>
+              </div>
+            )}
             <div>{renderResult()}</div>
           </div>
         </div>
