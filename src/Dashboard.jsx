@@ -293,23 +293,46 @@ export default function Dashboard({ username, password }) {
     const fetchAllData = async () => {
       const results = await Promise.all(
         endpoints.map(async (ep) => {
-          try {
-            const url = baseUrl + ep.url(username, password);
-            // Increased timeout to 120 seconds (2 minutes)
-            const res = await axios.get(url, { timeout: 120000 });
-            // Add basic check for successful response data
-            if (res.status >= 200 && res.status < 300 && res.data) {
-                 console.log(`Successfully fetched ${ep.label}:`, res.data);
-                 return { key: ep.key, data: res.data };
-            } else {
-                 // Handle cases where the request was successful but data is missing/empty
-                 console.warn(`Received empty or invalid data for ${ep.label}:`, res.data);
-                 return { key: ep.key, error: `Received empty or invalid data for ${ep.label}` };
+          let retries = 3; // Number of retries
+          let lastError = null;
+          
+          while (retries > 0) {
+            try {
+              const url = baseUrl + ep.url(username, password);
+              // Increased timeout to 120 seconds (2 minutes)
+              const res = await axios.get(url, { timeout: 120000 });
+              
+              // Check if response is empty or invalid
+              if (res.status >= 200 && res.status < 300 && res.data) {
+                // For schedule endpoint, check if studentSchedule is empty
+                if (ep.key === 'schedule' && (!res.data.studentSchedule || res.data.studentSchedule.length === 0)) {
+                  console.warn(`Empty schedule data received, retrying... (${retries} attempts left)`);
+                  retries--;
+                  await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1 second before retry
+                  continue;
+                }
+                
+                console.log(`Successfully fetched ${ep.label}:`, res.data);
+                return { key: ep.key, data: res.data };
+              } else {
+                console.warn(`Received empty or invalid data for ${ep.label}:`, res.data);
+                retries--;
+                await new Promise(resolve => setTimeout(resolve, 1000));
+                continue;
+              }
+            } catch (err) {
+              console.error(`Failed to fetch ${ep.label}:`, err);
+              lastError = err;
+              retries--;
+              if (retries > 0) {
+                await new Promise(resolve => setTimeout(resolve, 1000));
+                continue;
+              }
             }
-          } catch (err) {
-            console.error(`Failed to fetch ${ep.label}:`, err);
-            return { key: ep.key, error: `Failed to fetch ${ep.label}: ${err.message}` };
           }
+          
+          // If we've exhausted all retries, return the last error
+          return { key: ep.key, error: `Failed to fetch ${ep.label} after retries: ${lastError?.message || 'Unknown error'}` };
         })
       );
 
@@ -340,24 +363,37 @@ export default function Dashboard({ username, password }) {
       const processedScheduleClasses = [];
       if (scheduleData && scheduleData.studentSchedule && Array.isArray(scheduleData.studentSchedule)) {
         console.log('Processing Schedule Data:', scheduleData.studentSchedule); // Log raw schedule data
-        scheduleData.studentSchedule.forEach(semester => {
-          if (semester && semester.quarters && Array.isArray(semester.quarters)) {
-            semester.quarters.forEach(quarter => {
-              if (quarter && quarter.classes && Array.isArray(quarter.classes)) {
-                quarter.classes.forEach(cls => {
-                  // Ensure class object is valid before pushing
-                  if (cls && typeof cls === 'object' && cls.name) {
-                    processedScheduleClasses.push({
-                      ...cls,
-                      Period: cls.Period || 'Z', // Use 'Z' or similar to push classes without period to the end
-                      Days: cls.Days || 'Unknown'
-                    });
-                  }
+        
+        // Create a map to track unique classes
+        const uniqueClasses = new Map();
+        
+        // Process classes in pairs (first semester only)
+        for (let i = 0; i < scheduleData.studentSchedule.length; i += 4) {
+          // Only process the first two entries (first semester A and B day)
+          for (let j = 0; j < 2; j++) {
+            const cls = scheduleData.studentSchedule[i + j];
+            if (cls && typeof cls === 'object' && cls.courseName) {
+              // Get the class name before the hyphen and remove semester marker
+              const className = cls.courseName.split('-')[0].trim().replace(/\s+S\d+.*$/, '');
+              const key = `${className}-${cls.periods}-${cls.days}`;
+              
+              // Only add if we haven't seen this class before
+              if (!uniqueClasses.has(key)) {
+                uniqueClasses.set(key, {
+                  name: className,
+                  Period: cls.periods || 'Z',
+                  Days: cls.days || 'Unknown',
+                  courseCode: cls.courseCode,
+                  teacher: cls.teacher,
+                  room: cls.room
                 });
               }
-            });
+            }
           }
-        });
+        }
+        
+        // Convert map values to array
+        processedScheduleClasses.push(...uniqueClasses.values());
       }
       console.log('Processed Schedule Classes:', processedScheduleClasses); // Log processed classes array
 
