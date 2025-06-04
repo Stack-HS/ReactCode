@@ -426,7 +426,7 @@ export default function GradePortal() {
                     <h4 className="font-semibold">Assignments:</h4>
                     <ul className="list-disc ml-5">
                       {cls.assignments.map((assignment, idx) => (
-                        <li key={idx}>
+                        <li key={idx} className="text-sm">
                           {assignment.name} — {assignment.category}
                           {assignment.dateDue ? ` — Due: ${assignment.dateDue}` : ''}
                           {assignment.score ? ` — Score: ${assignment.score}` : ''}
@@ -457,7 +457,7 @@ export default function GradePortal() {
                     <h4 className="font-semibold">Assignments:</h4>
                     <ul className="list-disc ml-5">
                       {cls.assignments.map((assignment, idx) => (
-                        <li key={idx}>
+                        <li key={idx} className="text-sm">
                           {assignment.name} — {assignment.category}
                           {assignment.dateDue ? ` — Due: ${assignment.dateDue}` : ''}
                           {assignment.score ? ` — Score: ${assignment.score}` : ''}

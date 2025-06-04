@@ -362,7 +362,7 @@ export default function Dashboard({ username, password }) {
       // Process schedule data for home tab classes (A/B Day)
       const processedScheduleClasses = [];
       if (scheduleData && scheduleData.studentSchedule && Array.isArray(scheduleData.studentSchedule)) {
-        console.log('Processing Schedule Data:', scheduleData.studentSchedule); // Log raw schedule data
+        console.log('Raw Schedule Data:', scheduleData.studentSchedule);
         
         // Create a map to track unique classes
         const uniqueClasses = new Map();
@@ -395,7 +395,7 @@ export default function Dashboard({ username, password }) {
         // Convert map values to array
         processedScheduleClasses.push(...uniqueClasses.values());
       }
-      console.log('Processed Schedule Classes:', processedScheduleClasses); // Log processed classes array
+      console.log('Processed Schedule Classes:', processedScheduleClasses);
 
       const aDayClasses = processedScheduleClasses
         .filter(cls => cls.Days === 'A' && !cls.name?.toLowerCase().includes('advisory'))
@@ -413,24 +413,40 @@ export default function Dashboard({ username, password }) {
           return periodA - periodB;
         });
 
-      console.log('A Day Classes:', aDayClasses); // Log A Day classes
-      console.log('B Day Classes:', bDayClasses); // Log B Day classes
+      console.log('A Day Classes:', aDayClasses);
+      console.log('B Day Classes:', bDayClasses);
 
-      setHomeData(prev => ({ ...prev, classes: { aDay: aDayClasses, bDay: bDayClasses } }));
+      // Process current classes data
+      const currentClasses = currentClassesData?.currentClasses || [];
+      console.log('Current Classes Data:', currentClasses);
+
+      setHomeData(prev => ({ 
+        ...prev, 
+        classes: { 
+          aDay: aDayClasses, 
+          bDay: bDayClasses 
+        },
+        currentClasses: currentClasses // Add current classes to homeData
+      }));
 
       // Process assignments from current classes for home tab
       const processedAssignments = [];
       if (currentClassesData && currentClassesData.currentClasses && Array.isArray(currentClassesData.currentClasses)) {
+        console.log('Processing assignments from current classes:', currentClassesData.currentClasses);
         currentClassesData.currentClasses.forEach(cls => {
           if (cls && cls.assignments && Array.isArray(cls.assignments)) {
+            console.log(`Processing assignments for class ${cls.name}:`, cls.assignments);
             cls.assignments.forEach(assignment => {
               // Ensure assignment object is valid before pushing
               if (assignment && typeof assignment === 'object' && assignment.name) {
+                // Parse the date string to a Date object for proper sorting
+                const dueDate = assignment.dateDue ? new Date(assignment.dateDue) : null;
                 processedAssignments.push({
                   ...assignment,
                   className: cls.name || 'Unknown Class',
-                  dateDue: assignment.dateDue || null,
-                  score: assignment.score || null
+                  dateDue: dueDate,
+                  score: assignment.score || null,
+                  totalPoints: assignment.totalPoints || null
                 });
               }
             });
@@ -443,9 +459,10 @@ export default function Dashboard({ username, password }) {
         if (!a.dateDue && !b.dateDue) return 0;
         if (!a.dateDue) return 1;
         if (!b.dateDue) return -1;
-        return new Date(b.dateDue) - new Date(a.dateDue);
+        return b.dateDue - a.dateDue;
       });
 
+      console.log('Final processed assignments:', processedAssignments);
       setHomeData(prev => ({ ...prev, assignments: processedAssignments }));
 
       console.log('Home Data after processing:', { classes: { aDay: aDayClasses, bDay: bDayClasses }, assignments: processedAssignments });
@@ -485,9 +502,14 @@ export default function Dashboard({ username, password }) {
      <>
        <div className={styles.sectionContainer}>
          <h2 className={styles.sectionTitle}>Current Classes</h2>
-         {cache['currentclasses'] && cache['currentclasses'].currentClasses && cache['currentclasses'].currentClasses.length > 0 ? (
-           <GradesSection pastClasses={cache['currentclasses'].currentClasses} onClassClick={setSelectedClass} />
-         ) : ( errors['currentclasses'] ? <div className={styles.errorMessage}>{errors['currentclasses']}</div> : <div className={styles.noData}>No current classes found.</div>)}
+         {homeData.currentClasses && homeData.currentClasses.length > 0 ? (
+           <GradesSection pastClasses={homeData.currentClasses} onClassClick={setSelectedClass} />
+         ) : ( 
+           errors['currentclasses'] ? 
+             <div className={styles.errorMessage}>{errors['currentclasses']}</div> 
+             : 
+             <div className={styles.noData}>No current classes found.</div>
+         )}
        </div>
        <div className={styles.sectionContainer}>
          <h2 className={styles.sectionTitle}>Past Classes</h2>
@@ -747,38 +769,41 @@ export default function Dashboard({ username, password }) {
              {errors.currentclasses ? (
                <div className={styles.errorMessage}>{errors.currentclasses}</div>
              ) : (
-               /* Always render Assignments section if homeData.assignments is an array, let it handle empty state */
-               homeData.assignments && Array.isArray(homeData.assignments) && (
-                 <div className={styles.assignmentsSection}>
-                   <h2 className={styles.sectionTitle}>
-                      Assignments
-                      {homeData.assignments.length > assignmentsPerPage && (
-                         <span className={styles.viewAll} onClick={nextAssignmentsPage}>View More →</span>
-                      )}
-                   </h2>
-                   <div className={styles.assignmentCardsContainer}>
-                     {currentAssignments.length > 0 ? (
-                        currentAssignments.map((assignment, index) => (
-                          <div key={index} className={styles.assignmentCard}>
-                            <div className={styles.assignmentTitle}>{assignment.name}</div>
-                            <div className={styles.assignmentDate}>
-                              {assignment.dateDue ? new Date(assignment.dateDue).toLocaleDateString() : 'No Due Date'}
-                            </div>
+               <div className={styles.assignmentsSection}>
+                 <h2 className={styles.sectionTitle}>
+                    Assignments
+                    {homeData.assignments && homeData.assignments.length > assignmentsPerPage && (
+                       <span className={styles.viewAll} onClick={nextAssignmentsPage}>View More →</span>
+                    )}
+                 </h2>
+                 <div className={styles.assignmentCardsContainer}>
+                   {homeData.assignments && homeData.assignments.length > 0 ? (
+                      currentAssignments.map((assignment, index) => (
+                        <div key={index} className={styles.assignmentCard}>
+                          <div className={styles.assignmentTitle}>{assignment.name}</div>
+                          <div className={styles.assignmentClass}>{assignment.className}</div>
+                          <div className={styles.assignmentDate}>
+                            {assignment.dateDue ? assignment.dateDue.toLocaleDateString() : 'No Due Date'}
                           </div>
-                        ))
-                     ) : (
-                        <div className={styles.noData}>No assignments found.</div>
-                     )}
-                   </div>
-                    {/* Add pagination buttons if more assignments exist */}
-                   {homeData.assignments.length > assignmentsPerPage && (
-                      <div className={styles.assignmentPagination}>
-                          <button onClick={prevAssignmentsPage} disabled={assignmentPage === 0} className={styles.paginationButton}>Previous</button>
-                          <button onClick={nextAssignmentsPage} disabled={(assignmentPage + 1) * assignmentsPerPage >= homeData.assignments.length} className={styles.paginationButton}>Next</button>
-                      </div>
+                          {assignment.score && (
+                            <div className={styles.assignmentScore}>
+                              {assignment.score} / {assignment.totalPoints}
+                            </div>
+                          )}
+                        </div>
+                      ))
+                   ) : (
+                      <div className={styles.noData}>No assignments found.</div>
                    )}
                  </div>
-               )
+                  {/* Add pagination buttons if more assignments exist */}
+                 {homeData.assignments && homeData.assignments.length > assignmentsPerPage && (
+                    <div className={styles.assignmentPagination}>
+                        <button onClick={prevAssignmentsPage} disabled={assignmentPage === 0} className={styles.paginationButton}>Previous</button>
+                        <button onClick={nextAssignmentsPage} disabled={(assignmentPage + 1) * assignmentsPerPage >= homeData.assignments.length} className={styles.paginationButton}>Next</button>
+                    </div>
+                 )}
+               </div>
              )}
 
              {/* Transcript and Rate My Professor Buttons */}
