@@ -136,6 +136,73 @@ const bottomBarIcons = [
   { key: 'portfolio', label: 'Portfolio', img: '/portfolio.png' },
 ];
 
+// Transcript Page Component
+function TranscriptPage({ transcriptData, gpaData, onBack }) {
+  if (!transcriptData) return <div className={styles.noData}>No transcript data available.</div>;
+  
+  return (
+    <div className={styles.sectionCard}>
+      <button className={styles.backButton} onClick={onBack}>Back to Dashboard</button>
+      <h2 style={{ marginTop: 0 }}>Transcript</h2>
+      {transcriptData.map((term, idx) => (
+        <div key={idx} style={{ marginBottom: 24 }}>
+          <div style={{ fontWeight: 700, fontSize: '1.1rem', marginBottom: 6 }}>
+            {term.yearsAttended} — Grade Level {term.gradeLevel} — {term.building} (Credits: {term.totalCredits})
+          </div>
+          <table style={{ width: '100%', borderCollapse: 'collapse', background: 'rgba(255,255,255,0.08)', borderRadius: 8 }}>
+            <thead>
+              <tr>
+                <th style={{ textAlign: 'left', padding: '8px', color: '#e3eafd' }}>Course Code</th>
+                <th style={{ textAlign: 'left', padding: '8px', color: '#e3eafd' }}>Course Name</th>
+                <th style={{ textAlign: 'left', padding: '8px', color: '#e3eafd' }}>Sem 1</th>
+                <th style={{ textAlign: 'left', padding: '8px', color: '#e3eafd' }}>Sem 2</th>
+                <th style={{ textAlign: 'left', padding: '8px', color: '#e3eafd' }}>Final</th>
+                <th style={{ textAlign: 'left', padding: '8px', color: '#e3eafd' }}>Credits</th>
+              </tr>
+            </thead>
+            <tbody>
+              {term.courses.map((course, idx2) => (
+                <tr key={idx2}>
+                  <td style={{ padding: '8px', color: '#fff' }}>{course.courseCode}</td>
+                  <td style={{ padding: '8px', color: '#fff' }}>{course.courseName}</td>
+                  <td style={{ padding: '8px', color: '#fff' }}>{course.sem1Grade}</td>
+                  <td style={{ padding: '8px', color: '#fff' }}>{course.sem2Grade}</td>
+                  <td style={{ padding: '8px', color: '#fff' }}>{course.finalGrade}</td>
+                  <td style={{ padding: '8px', color: '#fff' }}>{course.courseCredits}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ))}
+
+      {gpaData && (
+        <div style={{ marginTop: '24px', paddingTop: '16px', borderTop: '1px solid rgba(255, 255, 255, 0.1)' }}>
+          <h3 style={{ marginTop: 0, marginBottom: '12px', fontSize: '1.1rem', fontWeight: 700, color: '#fff' }}>GPA Information</h3>
+          <p style={{ marginBottom: '8px', color: '#e3eafd' }}><strong>Unweighted GPA:</strong> {gpaData.unweightedGPA}</p>
+          <p style={{ marginBottom: '8px', color: '#e3eafd' }}><strong>Weighted GPA:</strong> {gpaData.weightedGPA}</p>
+          <p style={{ marginBottom: '8px', color: '#e3eafd' }}><strong>Rank:</strong> {gpaData.rank}</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// GPA Page Component
+function GpaPage({ gpaData, onBack }) {
+  if (!gpaData) return <div className={styles.noData}>No GPA data available.</div>;
+
+  return (
+    <div className={styles.sectionCard}>
+      <button className={styles.backButton} onClick={onBack}>Back to Dashboard</button>
+      <h2 style={{ marginTop: 0 }}>GPA Information</h2>
+      <p><strong>Unweighted GPA:</strong> {gpaData.unweightedGPA}</p>
+      <p><strong>Weighted GPA:</strong> {gpaData.weightedGPA}</p>
+      <p><strong>Rank:</strong> {gpaData.rank}</p>
+    </div>
+  );
+}
+
 export default function Dashboard({ username, password }) {
   const [cache, setCache] = useState({});
   const [errors, setErrors] = useState({});
@@ -146,7 +213,9 @@ export default function Dashboard({ username, password }) {
   const [selectedClass, setSelectedClass] = useState(null);
   const [studentInfo, setStudentInfo] = useState(null);
   const [showTranscript, setShowTranscript] = useState(false);
+  const [showFullTranscript, setShowFullTranscript] = useState(false);
   const [showGpa, setShowGpa] = useState(false);
+  const [showFullGpa, setShowFullGpa] = useState(false);
   const [bottomBarActive, setBottomBarActive] = useState('home');
   const transcriptRef = useRef(null);
   const gpaRef = useRef(null);
@@ -164,8 +233,8 @@ export default function Dashboard({ username, password }) {
   // Home Tab Data State
   const [homeData, setHomeData] = useState({ classes: { aDay: [], bDay: [] }, assignments: [] });
 
-  // Assignment Pagination State
-  const [assignmentPage, setAssignmentPage] = useState(0);
+  // Assignment Pagination State - REMOVED
+  // const [assignmentPage, setAssignmentPage] = useState(0);
   const assignmentsPerPage = 8; // 2 rows of 4
 
   const ecApiToken = "z5Vdkas3kjaf4fk93jf84230fjgh8329cjaaabcddde3fafa0";
@@ -304,20 +373,38 @@ export default function Dashboard({ username, password }) {
               
               // Check if response is empty or invalid
               if (res.status >= 200 && res.status < 300 && res.data) {
+                // For currentclasses endpoint, check if currentClasses is empty
+                if (ep.key === 'currentclasses') {
+                  if (!res.data.currentClasses || res.data.currentClasses.length === 0) {
+                    console.log('Empty current classes data received, retrying...');
+                    retries--;
+                    await new Promise(resolve => setTimeout(resolve, 2000)); // Wait 2 seconds before retry
+                    continue;
+                  }
+                }
+                
                 // For schedule endpoint, check if studentSchedule is empty
                 if (ep.key === 'schedule' && (!res.data.studentSchedule || res.data.studentSchedule.length === 0)) {
-                  console.warn(`Empty schedule data received, retrying... (${retries} attempts left)`);
+                  console.log('Empty schedule data received, retrying...');
                   retries--;
-                  await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1 second before retry
+                  await new Promise(resolve => setTimeout(resolve, 2000));
+                  continue;
+                }
+
+                // For transcript endpoint, check if studentTranscript is empty
+                if (ep.key === 'transcript' && (!res.data.studentTranscript || res.data.studentTranscript.length === 0)) {
+                  console.log('Empty transcript data received, retrying...');
+                  retries--;
+                  await new Promise(resolve => setTimeout(resolve, 2000));
                   continue;
                 }
                 
                 console.log(`Successfully fetched ${ep.label}:`, res.data);
                 return { key: ep.key, data: res.data };
               } else {
-                console.warn(`Received empty or invalid data for ${ep.label}:`, res.data);
+                console.log(`Received empty or invalid data for ${ep.label}:`, res.data);
                 retries--;
-                await new Promise(resolve => setTimeout(resolve, 1000));
+                await new Promise(resolve => setTimeout(resolve, 2000));
                 continue;
               }
             } catch (err) {
@@ -325,7 +412,7 @@ export default function Dashboard({ username, password }) {
               lastError = err;
               retries--;
               if (retries > 0) {
-                await new Promise(resolve => setTimeout(resolve, 1000));
+                await new Promise(resolve => setTimeout(resolve, 2000));
                 continue;
               }
             }
@@ -359,87 +446,67 @@ export default function Dashboard({ username, password }) {
       setStudentInfo(info);
       setLoading(false);
 
-      // Process schedule data for home tab classes (A/B Day)
-      const processedScheduleClasses = [];
-      if (scheduleData && scheduleData.studentSchedule && Array.isArray(scheduleData.studentSchedule)) {
-        console.log('Raw Schedule Data:', scheduleData.studentSchedule);
-        
-        // Create a map to track unique classes
-        const uniqueClasses = new Map();
-        
-        // Process classes in pairs (first semester only)
-        for (let i = 0; i < scheduleData.studentSchedule.length; i += 4) {
-          // Only process the first two entries (first semester A and B day)
-          for (let j = 0; j < 2; j++) {
-            const cls = scheduleData.studentSchedule[i + j];
-            if (cls && typeof cls === 'object' && cls.courseName) {
-              // Get the class name before the hyphen and remove semester marker
-              const className = cls.courseName.split('-')[0].trim().replace(/\s+S\d+.*$/, '');
-              const key = `${className}-${cls.periods}-${cls.days}`;
-              
-              // Only add if we haven't seen this class before
-              if (!uniqueClasses.has(key)) {
-                uniqueClasses.set(key, {
-                  name: className,
-                  Period: cls.periods || 'Z',
-                  Days: cls.days || 'Unknown',
-                  courseCode: cls.courseCode,
-                  teacher: cls.teacher,
-                  room: cls.room
-                });
+      // Only process data if we have valid current classes data
+      if (currentClassesData && currentClassesData.currentClasses && currentClassesData.currentClasses.length > 0) {
+        // Process schedule data for home tab classes (A/B Day)
+        const processedScheduleClasses = [];
+        if (scheduleData && scheduleData.studentSchedule && Array.isArray(scheduleData.studentSchedule)) {
+          console.log('Raw Schedule Data:', scheduleData.studentSchedule);
+          
+          // Create a map to track unique classes
+          const uniqueClasses = new Map();
+          
+          // Process classes in pairs (first semester only)
+          for (let i = 0; i < scheduleData.studentSchedule.length; i += 4) {
+            // Only process the first two entries (first semester A and B day)
+            for (let j = 0; j < 2; j++) {
+              const cls = scheduleData.studentSchedule[i + j];
+              if (cls && typeof cls === 'object' && cls.courseName) {
+                // Get the class name before the hyphen and remove semester marker
+                const className = cls.courseName.split('-')[0].trim().replace(/\s+S\d+.*$/, '');
+                const key = `${className}-${cls.periods}-${cls.days}`;
+                
+                // Only add if we haven't seen this class before
+                if (!uniqueClasses.has(key)) {
+                  uniqueClasses.set(key, {
+                    name: className,
+                    Period: cls.periods || 'Z',
+                    Days: cls.days || 'Unknown',
+                    courseCode: cls.courseCode,
+                    teacher: cls.teacher,
+                    room: cls.room
+                  });
+                }
               }
             }
           }
+          
+          // Convert map values to array
+          processedScheduleClasses.push(...uniqueClasses.values());
         }
-        
-        // Convert map values to array
-        processedScheduleClasses.push(...uniqueClasses.values());
-      }
-      console.log('Processed Schedule Classes:', processedScheduleClasses);
 
-      const aDayClasses = processedScheduleClasses
-        .filter(cls => cls.Days === 'A' && !cls.name?.toLowerCase().includes('advisory'))
-        .sort((a, b) => {
-          const periodA = parseInt(a.Period, 10) || 999;
-          const periodB = parseInt(b.Period, 10) || 999;
-          return periodA - periodB;
-        });
+        const aDayClasses = processedScheduleClasses
+          .filter(cls => cls.Days === 'A' && !cls.name?.toLowerCase().includes('advisory'))
+          .sort((a, b) => {
+            const periodA = parseInt(a.Period, 10) || 999;
+            const periodB = parseInt(b.Period, 10) || 999;
+            return periodA - periodB;
+          });
 
-      const bDayClasses = processedScheduleClasses
-        .filter(cls => cls.Days === 'B' && !cls.name?.toLowerCase().includes('advisory'))
-        .sort((a, b) => {
-          const periodA = parseInt(a.Period, 10) || 999;
-          const periodB = parseInt(b.Period, 10) || 999;
-          return periodA - periodB;
-        });
+        const bDayClasses = processedScheduleClasses
+          .filter(cls => cls.Days === 'B' && !cls.name?.toLowerCase().includes('advisory'))
+          .sort((a, b) => {
+            const periodA = parseInt(a.Period, 10) || 999;
+            const periodB = parseInt(b.Period, 10) || 999;
+            return periodA - periodB;
+          });
 
-      console.log('A Day Classes:', aDayClasses);
-      console.log('B Day Classes:', bDayClasses);
-
-      // Process current classes data
-      const currentClasses = currentClassesData?.currentClasses || [];
-      console.log('Current Classes Data:', currentClasses);
-
-      setHomeData(prev => ({ 
-        ...prev, 
-        classes: { 
-          aDay: aDayClasses, 
-          bDay: bDayClasses 
-        },
-        currentClasses: currentClasses // Add current classes to homeData
-      }));
-
-      // Process assignments from current classes for home tab
-      const processedAssignments = [];
-      if (currentClassesData && currentClassesData.currentClasses && Array.isArray(currentClassesData.currentClasses)) {
-        console.log('Processing assignments from current classes:', currentClassesData.currentClasses);
+        // Process assignments from current classes for home tab
+        const processedAssignments = [];
         currentClassesData.currentClasses.forEach(cls => {
           if (cls && cls.assignments && Array.isArray(cls.assignments)) {
-            console.log(`Processing assignments for class ${cls.name}:`, cls.assignments);
             cls.assignments.forEach(assignment => {
-              // Ensure assignment object is valid before pushing
               if (assignment && typeof assignment === 'object' && assignment.name) {
-                // Parse the date string to a Date object for proper sorting
                 const dueDate = assignment.dateDue ? new Date(assignment.dateDue) : null;
                 processedAssignments.push({
                   ...assignment,
@@ -452,20 +519,24 @@ export default function Dashboard({ username, password }) {
             });
           }
         });
+
+        // Sort assignments by dateDue (latest first)
+        processedAssignments.sort((a, b) => {
+          if (!a.dateDue && !b.dateDue) return 0;
+          if (!a.dateDue) return 1;
+          if (!b.dateDue) return -1;
+          return b.dateDue - a.dateDue;
+        });
+
+        setHomeData(prev => ({
+          ...prev,
+          classes: { aDay: aDayClasses, bDay: bDayClasses },
+          currentClasses: currentClassesData.currentClasses,
+          assignments: processedAssignments
+        }));
+      } else {
+        console.log('Skipping data processing due to invalid or empty current classes data');
       }
-
-      // Sort assignments by dateDue (latest first)
-      processedAssignments.sort((a, b) => {
-        if (!a.dateDue && !b.dateDue) return 0;
-        if (!a.dateDue) return 1;
-        if (!b.dateDue) return -1;
-        return b.dateDue - a.dateDue;
-      });
-
-      console.log('Final processed assignments:', processedAssignments);
-      setHomeData(prev => ({ ...prev, assignments: processedAssignments }));
-
-      console.log('Home Data after processing:', { classes: { aDay: aDayClasses, bDay: bDayClasses }, assignments: processedAssignments });
     };
 
     fetchAllData();
@@ -520,9 +591,9 @@ export default function Dashboard({ username, password }) {
 
          {/* Section buttons for Transcript and GPA (within Grades view) */}
          <div className={styles.bottomSectionButtons} style={{ marginTop: '1.5rem' }}> {/* Added margin */}
-           <button className={styles.sectionButton} onClick={() => setShowTranscript((v) => !v)}>
+           <button className={styles.sectionButton} onClick={() => setShowFullTranscript(true)}>
               <img src="/transcript.png" alt="Transcript" className={styles.bottomBarIcon} style={{ marginRight: 12, verticalAlign: 'middle' }} />
-             {showTranscript ? 'Hide Transcript' : 'Transcript'}
+             {showFullTranscript ? 'Hide Transcript' : 'Transcript'}
            </button>
            <button className={styles.sectionButton} onClick={() => setShowGpa((v) => !v)}>
               <img src="/gpa.png" alt="Rate My Professor" className={styles.bottomBarIcon} style={{ marginRight: 12, verticalAlign: 'middle' }} />
@@ -531,7 +602,7 @@ export default function Dashboard({ username, password }) {
          </div>
 
          {/* Transcript and GPA sections (conditionally rendered within Grades view) */}
-         {showTranscript && cache['transcript'] && cache['transcript'].studentTranscript ? (
+         {showFullTranscript && cache['transcript'] && cache['transcript'].studentTranscript ? (
             <div ref={transcriptRef} className={styles.sectionCard}>
               <h2 style={{ marginTop: 0 }}>Transcript</h2>
               {/* ... Transcript table rendering ... */}
@@ -567,19 +638,7 @@ export default function Dashboard({ username, password }) {
                  </div>
                ))}
              </div>
-         ) : (showTranscript && errors['transcript'] ? <div className={styles.errorMessage}>{errors['transcript']}</div> : null)}
-
-         {showGpa && cache['gpa'] ? (
-           <div ref={gpaRef} className={styles.sectionCard}>
-             <h2 style={{ marginTop: 0 }}>GPA</h2>
-             {/* ... GPA details rendering ... */}
-             <>
-               <div><strong>Unweighted GPA:</strong> {cache['gpa'].unweightedGPA}</div>
-               <div><strong>Weighted GPA:</strong> {cache['gpa'].weightedGPA}</div>
-               <div><strong>Rank:</strong> {cache['gpa'].rank}</div>
-             </>
-           </div>
-         ) : (showGpa && errors['gpa'] ? <div className={styles.errorMessage}>{errors['gpa']}</div> : null)}
+         ) : (showFullTranscript && errors['transcript'] ? <div className={styles.errorMessage}>{errors['transcript']}</div> : null)}
        </div>
      </>
   );
@@ -717,19 +776,6 @@ export default function Dashboard({ username, password }) {
     </div>
   );
 
-  // Assignment Navigation
-  const nextAssignmentsPage = () => {
-    if (homeData.assignments.length > (assignmentPage + 1) * assignmentsPerPage) {
-      setAssignmentPage(assignmentPage + 1);
-    }
-  };
-
-  const prevAssignmentsPage = () => {
-    if (assignmentPage > 0) {
-      setAssignmentPage(assignmentPage - 1);
-    }
-  };
-
   // Main content rendering based on bottomBarActive
   let pageContent = null;
 
@@ -737,14 +783,22 @@ export default function Dashboard({ username, password }) {
     pageContent = <div className={styles.loadingMessage}>Loading all data, please wait...</div>;
   } else if (selectedClass) {
     pageContent = <AssignmentsSection cls={selectedClass} onBack={() => setSelectedClass(null)} />;
+  } else if (showFullTranscript) {
+    pageContent = <TranscriptPage transcriptData={cache['transcript']?.studentTranscript} gpaData={cache['gpa']} onBack={() => setShowFullTranscript(false)} />;
+  } else if (showFullGpa) {
+    pageContent = <GpaPage gpaData={cache['gpa']} onBack={() => setShowFullGpa(false)} />;
   } else {
      switch (bottomBarActive) {
        case 'home':
          console.log('Rendering Home tab with data:', homeData); // Log homeData before rendering
          const currentAssignments = homeData.assignments.slice(
-           assignmentPage * assignmentsPerPage,
-           (assignmentPage + 1) * assignmentsPerPage
+           // assignmentPage * assignmentsPerPage,
+           // (assignmentPage + 1) * assignmentsPerPage
          );
+         const assignmentBlocks = [];
+         for (let i = 0; i < currentAssignments.length; i += assignmentsPerPage) {
+           assignmentBlocks.push(currentAssignments.slice(i, i + assignmentsPerPage));
+         }
          pageContent = (
            <div className={styles.homeDashboardContent}>
              {errors.schedule ? (
@@ -772,48 +826,37 @@ export default function Dashboard({ username, password }) {
                <div className={styles.assignmentsSection}>
                  <h2 className={styles.sectionTitle}>
                     Assignments
-                    {homeData.assignments && homeData.assignments.length > assignmentsPerPage && (
-                       <span className={styles.viewAll} onClick={nextAssignmentsPage}>View More →</span>
-                    )}
                  </h2>
-                 <div className={styles.assignmentCardsContainer}>
-                   {homeData.assignments && homeData.assignments.length > 0 ? (
-                      currentAssignments.map((assignment, index) => (
+                 <div className={styles.assignmentCardsScrollContainer}>
+                   {assignmentBlocks.map((block, blockIndex) => (
+                     <div key={blockIndex} className={styles.assignmentBlockGrid}>
+                       {block.map((assignment, index) => (
                         <div key={index} className={styles.assignmentCard}>
                           <div className={styles.assignmentTitle}>{assignment.name}</div>
-                          <div className={styles.assignmentClass}>{assignment.className}</div>
                           <div className={styles.assignmentDate}>
                             {assignment.dateDue ? assignment.dateDue.toLocaleDateString() : 'No Due Date'}
                           </div>
                           {assignment.score && (
                             <div className={styles.assignmentScore}>
-                              {assignment.score} / {assignment.totalPoints}
+                              {assignment.score}
                             </div>
                           )}
                         </div>
-                      ))
-                   ) : (
-                      <div className={styles.noData}>No assignments found.</div>
-                   )}
+                       ))}
+                     </div>
+                   ))}
                  </div>
-                  {/* Add pagination buttons if more assignments exist */}
-                 {homeData.assignments && homeData.assignments.length > assignmentsPerPage && (
-                    <div className={styles.assignmentPagination}>
-                        <button onClick={prevAssignmentsPage} disabled={assignmentPage === 0} className={styles.paginationButton}>Previous</button>
-                        <button onClick={nextAssignmentsPage} disabled={(assignmentPage + 1) * assignmentsPerPage >= homeData.assignments.length} className={styles.paginationButton}>Next</button>
-                    </div>
-                 )}
                </div>
              )}
 
              {/* Transcript and Rate My Professor Buttons */}
              <div className={styles.bottomSectionButtons}>
-               <button className={styles.sectionButton} onClick={() => setBottomBarActive('grades')}>
-                 <img src="/transcript.png" alt="Transcript" className={styles.bottomBarIcon} style={{ marginRight: 12, verticalAlign: 'middle' }} />
+               <button className={styles.sectionButton} onClick={() => setShowFullTranscript(true)}>
+                 <img src="/transcript.png" alt="Transcript" className={styles.bottomBarIcon} />
                  Transcript
                </button>
                <button className={styles.sectionButton} onClick={() => setShowGpa((v) => !v)}>
-                 <img src="/gpa.png" alt="Rate My Professor" className={styles.bottomBarIcon} style={{ marginRight: 12, verticalAlign: 'middle' }} />
+                 <img src="/gpa.png" alt="Rate My Professor" className={styles.bottomBarIcon} />
                  Rate My Professor
                </button>
              </div>
@@ -868,7 +911,12 @@ export default function Dashboard({ username, password }) {
       </div>
       {/* Main Page Content */}
       <div className={styles.mainContentArea}>
-        {pageContent}
+        <div
+          key={`${bottomBarActive}-${selectedClass?.name || 'none'}-${showFullTranscript}-${showFullGpa}`}
+          className={styles.pageTransitionContainer}
+        >
+          {pageContent}
+        </div>
       </div>
       {/* Student Info Modal */}
       <StudentInfoModal open={showStudentInfo} onClose={() => setShowStudentInfo(false)} info={studentInfo || {}} />
